@@ -1,9 +1,9 @@
 #! /bin/bash
 
-AHLT=../../..
+AHLT=..
 
 if [[ "$*" == *"parse"* ]]; then
-   $AHLT/util/corenlp-server.sh -quiet true -port 9000 -timeout 15000 &
+   $AHLT/util/corenlp-server.sh  &
    sleep 1
 
    PYTHONPATH=$AHLT/util
