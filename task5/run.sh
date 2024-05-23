@@ -1,6 +1,6 @@
 #! /bin/bash
 
-AHLT=../../..
+AHLT=..
 
 # train NN
 echo "Training NN"
