@@ -15,7 +15,7 @@ class Codemaps:
             self.__create_indexs(data, maxlen, suflen)
 
             # new external list
-            self.external_list = self.create_external_list()
+            # self.external_list = self.create_external_list()
 
         elif type(data) == str and maxlen is None and suflen is None:
             self.__load(data)
@@ -38,31 +38,48 @@ class Codemaps:
 
     # NEW
 
-    def encode_features(self, data):
-        # Convert the generator to a list to get the number of sentences
-        sentences = list(data.sentences())
-        num_sentences = len(sentences)
-        num_features = 4  # The number of features per word
+    # GO BACK TO PROVIDED VERSION; ADJUST LESS !!!
 
-        # Create a tensor full of zeros with the shape [num_sentences, self.maxlen, num_features]
+    def encode_features(self, data):
+        # Extract features for each word in each sentence
+        enc_features = []
+        for s in data.sentences():
+            if not s:  # Check if the sentence is empty
+                sentence_features = torch.zeros(
+                    (1, 1), dtype=torch.int64
+                )  # Create a placeholder zero vector
+            else:
+                sentence_features = torch.tensor(
+                    [
+                        [
+                            int(word["form"][0].isupper()),  # Capitalization
+                            # int("-" in word["form"]),  # Dash presence
+                            # int(
+                            #    any(char.isdigit() for char in word["form"])
+                            #  ),  # Digit presence
+                            # int(
+                            #    word["form"].lower() in self.external_list
+                            # ),  # External list presence
+                        ]
+                        for word in s
+                    ],
+                    dtype=torch.int64,
+                )
+            enc_features.append(sentence_features)
+
+        # Create a tensor full of zeros for padding, with an extra dimension for features
+        num_sentences = len(enc_features)
+        num_features = 1  # Update this based on the number of features you are using
         Xf = torch.zeros((num_sentences, self.maxlen, num_features), dtype=torch.int64)
 
-        # Iterate over each sentence to fill the tensor with features
-        for i, s in enumerate(sentences):
-            for j, word in enumerate(s):
-                if j >= self.maxlen:
-                    break  # Stop processing if the maximum length is reached
-                features = [
-                    1 if word["form"][0].isupper() else 0,  # Capitalization
-                    1 if "-" in word["form"] else 0,  # Dash presence
-                    (
-                        1 if any(char.isdigit() for char in word["form"]) else 0
-                    ),  # Number presence
-                    (
-                        1 if word["form"].lower() in self.external_list else 0
-                    ),  # External file presence
-                ]
-                Xf[i, j] = torch.tensor(features, dtype=torch.int64)
+        # Fill the padding tensor with sentence feature data
+        for i, features in enumerate(enc_features):
+            actual_length = features.size(0)
+            if actual_length > self.maxlen:
+                features = features[
+                    : self.maxlen
+                ]  # Truncate features if longer than maxlen
+            Xf[i, :actual_length] = features
 
         return Xf
 
