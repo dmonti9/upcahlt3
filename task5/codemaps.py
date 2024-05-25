@@ -86,9 +86,13 @@ class Codemaps:
         with open(name + ".idx") as f:
             for line in f.readlines():
 
-                # make dynamic here !!
-                # TODO
-                (t, k, i) = line.split()
+                parts = line.split()
+                t = parts[0]  # The tag is always the first part
+                i = parts[-1]  # The integer is always the last part
+                k = " ".join(
+                    parts[1:-1]
+                )  # The key is everything between the tag and the integer
+
                 if t == "MAXLEN":
                     self.maxlen = int(k)
                 elif t == "SUFLEN":
@@ -203,38 +207,33 @@ class Codemaps:
             Xlw[i, 0 : s.size()[0]] = s
 
         # Features, TODOOO
-        # External lists
-        # Encode external resources
-        enc = [
-            torch.Tensor(
-                [
-                    (
-                        self.external_index[w["lc_form"]]
-                        if w["lc_form"] in self.external_index
-                        else self.external_index["UNK"]
-                    )
-                    for w in s
-                ]
+
+        enc = []
+        for s in data.sentences():
+            cap = torch.Tensor([1 if w["form"].istitle() else 0 for w in s]).unsqueeze(
+                1
             )
-            for s in data.sentences()
-        ]
+            dash = torch.Tensor([1 if "-" in w["form"] else 0 for w in s]).unsqueeze(1)
+            num = torch.Tensor(
+                [1 if any(char.isdigit() for char in w["form"]) else 0 for w in s]
+            ).unsqueeze(1)
+            ext = torch.Tensor(
+                [1 if w["lc_form"] in self.external_index else 0 for w in s]
+            ).unsqueeze(1)
+            features = torch.cat((cap, dash, num, ext), dim=1)
+            enc.append(features)
 
-        # cut sentences longer than maxlen
-        enc = [s[0 : self.maxlen] for s in enc]
-        # create a tensor full of zeros
-        # Xf = torch.zeros((len(enc), self.maxlen, 11), dtype=torch.int64)
+        # Cut sentences longer than maxlen
+        enc = [e[: self.maxlen] for e in enc]
+        # Create a tensor full of zeros
+        Xf = torch.zeros((len(enc), self.maxlen, 4), dtype=torch.int64)
 
-        tsr = torch.Tensor([])
-        Xf = tsr.new_full(
-            (len(enc), self.maxlen), self.external_index["PAD"], dtype=torch.int64
-        )
-        # fill padding tensor with sentence data
+        # Fill the padding tensor with sentence data
         for i, s in enumerate(enc):
-            for j, f in enumerate(enc[i]):
-                Xf[i, j] = f
+            end_idx = s.shape[0]  # Find the actual length of the sentence features
+            Xf[i, :end_idx, :] = s  # Assign the sentence's features to the Xf tensor
 
-        # return encoded sequences
-        # return [Xlw,Xw,Xs,Xf]
+        # Return encoded sequences
         return [Xw, Xs, Xlw, Xf]
 
     ## --------- encode Y from given data -----------
