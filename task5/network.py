@@ -15,20 +15,22 @@ class nercLSTM(nn.Module):
         n_labels = codes.get_n_labels()
 
         self.embW = nn.Embedding(n_words, 100)
-        self.embS = nn.Embedding(n_sufs, 50)
+        self.embS = nn.Embedding(n_sufs, 75)
         self.embWl = nn.Embedding(n_words, 100)
-        self.embE = nn.Embedding(2, 50)  # Embedding layer for external features
+        self.embE = nn.Embedding(2, 75)  # Embedding layer for external features
 
-        self.dropW = nn.Dropout(0.1)
-        self.dropS = nn.Dropout(0.1)
-        self.dropWl = nn.Dropout(0.1)
-        self.dropE = nn.Dropout(0.1)  # Dropout for the external features
+        self.dropW = nn.Dropout(0.15)
+        self.dropS = nn.Dropout(0.15)
+        self.dropWl = nn.Dropout(0.15)
+        self.dropE = nn.Dropout(0.15)
 
-        # Update LSTM input size to 300 (100 + 100 + 50 + 200)
-        self.lstm = nn.LSTM(450, 200, bidirectional=True, batch_first=True)
+        self.norm = nn.LayerNorm(575)
 
-        self.fc1 = nn.Linear(400, 100)
-        self.fc2 = nn.Linear(100, n_labels)
+        # input needs to match total embs
+        self.lstm = nn.LSTM(575, 200, bidirectional=True, batch_first=True)
+
+        self.fc1 = nn.Linear(400, 100)  # Expand the first fully connected layer
+        self.fc3 = nn.Linear(100, n_labels)  # Final output layer
 
     def forward(self, w, s, lw, e):
         x = self.embW(w)
@@ -59,8 +61,10 @@ class nercLSTM(nn.Module):
         # Concatenate the four embeddings along the third dimension
         x = torch.cat((x, z, y, e), dim=2)
 
+        x = self.norm(x)  # Apply normalization before feeding into LSTM
         x, _ = self.lstm(x)
 
         x = self.fc1(x)
-        x = self.fc2(x)
+        x = func.relu(x)  # Activation function
+        x = self.fc3(x)
         return x
