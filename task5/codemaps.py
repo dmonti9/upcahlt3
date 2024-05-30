@@ -206,7 +206,7 @@ class Codemaps:
         for i, s in enumerate(enc):
             Xlw[i, 0 : s.size()[0]] = s
 
-        # Features, TODOOO
+        # Features
 
         enc = []
         for s in data.sentences():
@@ -259,6 +259,11 @@ class Codemaps:
     ## -------- get word index size ---------
     def get_n_words(self):
         return len(self.word_index)
+
+    ## -------- get lc word index size ---------
+
+    def get_n_lcwords(self):
+        return len(self.lword_index)
 
     ## -------- get suf index size ---------
     def get_n_sufs(self):

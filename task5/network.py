@@ -12,59 +12,53 @@ class nercLSTM(nn.Module):
 
         n_words = codes.get_n_words()
         n_sufs = codes.get_n_sufs()
+        n_lcwords = codes.get_n_lcwords()
         n_labels = codes.get_n_labels()
 
-        self.embW = nn.Embedding(n_words, 100)
-        self.embS = nn.Embedding(n_sufs, 75)
-        self.embWl = nn.Embedding(n_words, 100)
-        self.embE = nn.Embedding(2, 75)  # Embedding layer for external features
+        # Embeddings
+        self.embW = nn.Embedding(n_words, 100)  # Embeddings for words
+        self.embS = nn.Embedding(n_sufs, 50)  # Embeddings for suffixes
+        self.embLW = nn.Embedding(n_lcwords, 50)  # Embeddings for lowercased words
 
-        self.dropW = nn.Dropout(0.15)
-        self.dropS = nn.Dropout(0.15)
-        self.dropWl = nn.Dropout(0.15)
-        self.dropE = nn.Dropout(0.15)
+        # Dropout layers
+        self.dropW = nn.Dropout(0.1)
+        self.dropS = nn.Dropout(0.1)
+        self.dropLW = nn.Dropout(0.1)
 
-        self.norm = nn.LayerNorm(575)
+        # Feature transformation
+        self.feature_transform = nn.Linear(
+            4, 50
+        )  # Transform features to have the same dimensionality
 
-        # input needs to match total embs
-        self.lstm = nn.LSTM(575, 200, bidirectional=True, batch_first=True)
+        # LSTM layer
+        self.lstm = nn.LSTM(250, 200, bidirectional=True, batch_first=True)
 
-        self.fc1 = nn.Linear(400, 100)  # Expand the first fully connected layer
-        self.fc3 = nn.Linear(100, n_labels)  # Final output layer
+        # Fully connected layers
+        self.fc1 = nn.Linear(400, 300)  # Process LSTM outputs
+        self.fc2 = nn.Linear(300, n_labels)  # Final output layer
 
-    def forward(self, w, s, lw, e):
-        x = self.embW(w)
-        y = self.embS(s)
-        z = self.embWl(lw)
-        e = self.embE(e)  # Apply the new embedding layer
+    def forward(self, words, suffixes, lcwords, features):
+        # Embeddings
+        emb_words = self.embW(words)
+        emb_sufs = self.embS(suffixes)
+        emb_lcwords = self.embLW(lcwords)
 
-        # Debugging: Print shapes
-        # print(f"x shape: {x.shape}")
-        # print(f"y shape: {y.shape}")
-        # print(f"z shape: {z.shape}")
-        # print(f"e shape: {e.shape}")
+        # Apply dropout
+        emb_words = self.dropW(emb_words)
+        emb_sufs = self.dropS(emb_sufs)
+        emb_lcwords = self.dropLW(emb_lcwords)
 
-        # Reshape e by merging the last two dimensions
-        e = e.view(e.size(0), e.size(1), -1)
+        # Transform features
+        transformed_features = func.relu(self.feature_transform(features))
 
-        x = self.dropW(x)
-        y = self.dropS(y)
-        z = self.dropWl(z)
-        e = self.dropE(e)  # Apply dropout to the new embedding layer
+        # Concatenate all embeddings and transformed features
+        x = torch.cat((emb_words, emb_sufs, emb_lcwords, transformed_features), dim=2)
 
-        # Debugging: Print shapes after dropout
-        # print(f"x shape after dropout: {x.shape}")
-        # print(f"y shape after dropout: {y.shape}")
-        # print(f"z shape after dropout: {z.shape}")
-        # print(f"e shape after dropout: {e.shape}")
-
-        # Concatenate the four embeddings along the third dimension
-        x = torch.cat((x, z, y, e), dim=2)
-
-        x = self.norm(x)  # Apply normalization before feeding into LSTM
+        # LSTM processing
         x, _ = self.lstm(x)
 
-        x = self.fc1(x)
-        x = func.relu(x)  # Activation function
-        x = self.fc3(x)
+        # Fully connected layers
+        x = func.relu(self.fc1(x))
+        x = self.fc2(x)
+
         return x
