@@ -49,7 +49,7 @@ class nercLSTM(nn.Module):
         emb_lcwords = self.dropLW(emb_lcwords)
 
         # Transform features
-        transformed_features = func.relu(self.feature_transform(features))
+        transformed_features = func.relu(self.feature_transform(features.float()))
 
         # Concatenate all embeddings and transformed features
         x = torch.cat((emb_words, emb_sufs, emb_lcwords, transformed_features), dim=2)
