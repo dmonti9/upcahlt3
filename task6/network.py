@@ -1,10 +1,8 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from sklearn.decomposition import PCA
 
 criterion = nn.CrossEntropyLoss()
-
 
 class ddiCNN(nn.Module):
     def __init__(self, codes):
@@ -27,7 +25,6 @@ class ddiCNN(nn.Module):
         num_layers = 2
         bidirectional = True
         total_dim = emb_dim_word + emb_dim_pos + emb_dim_lc + emb_dim_lemmas
-        lstm_output_dim = total_dim if bidirectional else total_dim // 2
         
         # Create layers
         self.embW = nn.Embedding(n_words, emb_dim_word, padding_idx=0)
@@ -37,14 +34,12 @@ class ddiCNN(nn.Module):
         self.lstm = nn.LSTM(total_dim, total_dim // 2, num_layers,
                             batch_first=True, bidirectional=bidirectional, dropout=0.5)
         
-        # CNN layers with Batch Normalization
-        self.conv1 = nn.Conv1d(lstm_output_dim, 32, kernel_size=3, stride=1, padding='same')
+        lstm_output_dim = total_dim if bidirectional else total_dim // 2
+
+       
+        self.cnn1 = nn.Conv1d(lstm_output_dim, 32, kernel_size=3, stride=1, padding='same')
         self.pool1 = nn.MaxPool1d(kernel_size=2, stride=2, padding=0)
-        
-        self.conv2 = nn.Conv1d(32, 64, kernel_size=3, stride=1, padding='same')
-        self.pool2 = nn.MaxPool1d(kernel_size=2, stride=2, padding=0)
-        
-        self.out = nn.Linear(64 * (max_len // 4), n_labels)  # Adjusted for max pooling
+        self.out = nn.Linear(32 * (max_len // 2), n_labels) 
 
     def forward(self, w, p, lc, lemmas):
         x = self.embW(w)
@@ -56,15 +51,10 @@ class ddiCNN(nn.Module):
         x, _ = self.lstm(x)
         x = x.permute(0, 2, 1)
 
-        x = self.conv1(x)
+        x = self.cnn1(x)
         x = F.relu(x)
         x = self.pool1(x)
 
-        x = self.conv2(x)
-        x = F.relu(x)
-        x = self.pool2(x)
-
         x = x.flatten(start_dim=1)
         x = self.out(x)
-        
         return x
