@@ -31,25 +31,60 @@ class Codemaps:
                 (n, t) = x.strip().lower().split("|")
                 self.external[n] = t
 
-    def multi_token_match(self, sentence, external, maxlen):
-        tokens = [w["form"].lower() for w in sentence]
-        n = len(tokens)
-        matched_indices = [0] * n  # Default to 0 (no match)
-        for start in range(n):
-            for end in range(start + 1, n + 1):
-                phrase = " ".join(tokens[start:end])
-                if phrase in external:
-                    for i in range(start, end):
-                        if i < maxlen:  # Ensure we do not go out of index bounds
-                            matched_indices[i] = (
-                                1  # Set to 1 if part of a matched phrase
-                            )
-        # Ensure the tensor is of length `maxlen`
-        if len(matched_indices) > maxlen:
-            matched_indices = matched_indices[:maxlen]  # Truncate
-        else:
-            matched_indices += [0] * (maxlen - len(matched_indices))  # Pad with zeros
-        return torch.Tensor(matched_indices)
+    def encode_features(self, sentence, maxlen, external_index, external):
+        features = torch.zeros(
+            (maxlen, 5), dtype=torch.int64
+        )  # Prepare tensor for features
+
+        for i, word in enumerate(sentence):
+            if i >= maxlen:
+                break
+            # Feature 1: Is capitalized
+            is_capitalized = 1 if word["form"][0].isupper() else 0
+
+            # Feature 2: Contains dash
+            contains_dash = 1 if "-" in word["form"] else 0
+
+            # Feature 3: Contains numbers
+            contains_numbers = 1 if any(char.isdigit() for char in word["form"]) else 0
+
+            # Feature 4: Word length
+            word_length = len(word["form"])
+
+            # Feature 5: External classification
+            lc_form = word["lc_form"]
+            external_feature = (
+                1
+                if lc_form in external_index and external[lc_form] == "drug"
+                else (
+                    2
+                    if lc_form in external_index and external[lc_form] == "brand"
+                    else (
+                        3
+                        if lc_form in external_index and external[lc_form] == "drug_n"
+                        else (
+                            4
+                            if lc_form in external_index
+                            and external[lc_form] == "group"
+                            else 0
+                        )
+                    )
+                )
+            )
+
+            # Collect all features into a tensor
+            features[i] = torch.tensor(
+                [
+                    is_capitalized,
+                    contains_dash,
+                    contains_numbers,
+                    word_length,
+                    external_feature,
+                ],
+                dtype=torch.int64,
+            )
+
+        return features
 
     # --------- Create indexs from training data
     # Extract all words and labels in given sentences and
@@ -225,100 +260,14 @@ class Codemaps:
 
         ################## Features
 
-        # Feature: Capitalization
-        enc_cap = [
-            torch.Tensor([(1 if w["form"].istitle() else 0) for w in s])
+        # Encode additional features
+        Xf = [
+            self.encode_features(s, self.maxlen, self.external_index, self.external)
             for s in data.sentences()
         ]
-        enc_cap = [e[: self.maxlen] for e in enc_cap]
-        Xfcap = torch.full((len(enc_cap), self.maxlen), 0, dtype=torch.int64)
-        for i, s in enumerate(enc_cap):
-            Xfcap[i, : s.size(0)] = s
-
-        # Feature: Dashes
-        enc_dash = [
-            torch.Tensor([(1 if "-" in w["form"] else 0) for w in s])
-            for s in data.sentences()
-        ]
-        enc_dash = [e[: self.maxlen] for e in enc_dash]
-        Xfdash = torch.full((len(enc_dash), self.maxlen), 0, dtype=torch.int64)
-        for i, s in enumerate(enc_dash):
-            Xfdash[i, : s.size(0)] = s
-
-        # Feature: Numbers
-        enc_num = [
-            torch.Tensor(
-                [(1 if any(char.isdigit() for char in w["form"]) else 0) for w in s]
-            )
-            for s in data.sentences()
-        ]
-        enc_num = [e[: self.maxlen] for e in enc_num]
-        Xfnum = torch.full((len(enc_num), self.maxlen), 0, dtype=torch.int64)
-        for i, s in enumerate(enc_num):
-            Xfnum[i, : s.size(0)] = s
-
-        # Feature: External file label
-
-        enc = [
-            torch.Tensor(
-                [
-                    (
-                        1
-                        if w["lc_form"] in self.external_index
-                        and self.external[w["lc_form"]] == "drug"
-                        else (
-                            2
-                            if w["lc_form"] in self.external_index
-                            and self.external[w["lc_form"]] == "brand"
-                            else (
-                                3
-                                if w["lc_form"] in self.external_index
-                                and self.external[w["lc_form"]] == "drug_n"
-                                else (
-                                    4
-                                    if w["lc_form"] in self.external_index
-                                    and self.external[w["lc_form"]] == "group"
-                                    else 0
-                                )
-                            )
-                        )
-                    )  # default case
-                    for w in s
-                ]
-            )
-            for s in data.sentences()
-        ]
-
-        # Cut sentences longer than maxlen
-        enc = [e[: self.maxlen] for e in enc]
-
-        # Create a tensor full of zeros (for padding)
-        tsr = torch.Tensor([])
-        Xfext = tsr.new_full((len(enc), self.maxlen), 0, dtype=torch.int64)
-
-        # Fill the padding tensor with sentence data
-        for i, s in enumerate(enc):
-            Xfext[i, 0 : s.size()[0]] = s
-
-        # Feature: multi token
-        # Encoding multi-token entities and ensuring dimension consistency
-        enc_ext_multi = [
-            self.multi_token_match(s, self.external, self.maxlen)
-            for s in data.sentences()
-        ]
-
-        # Create a tensor full of padding (this may not be necessary now since multi_token_match handles padding)
-        tsr = torch.Tensor([])
-        Xext_multi = tsr.new_full(
-            (len(enc_ext_multi), self.maxlen), 0, dtype=torch.int64
-        )
-
-        # Fill the padding tensor with sentence data
-        for i, s in enumerate(enc_ext_multi):
-            Xext_multi[i, : s.size(0)] = s
 
         # Return encoded sequences
-        return [Xw, Xs, Xlw, Xfcap, Xfdash, Xfnum, Xfext, Xext_multi]
+        return [Xw, Xs, Xlw, torch.stack(Xf)]
 
     ## --------- encode Y from given data -----------
     def encode_labels(self, data):
