@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as func
+from torch.nn import LayerNorm
+
 
 criterion = nn.CrossEntropyLoss()
 
@@ -16,7 +18,7 @@ class nercLSTM(nn.Module):
 
         # Embeddings
         emb_words = 100
-        emb_sufs = 50
+        emb_sufs = 100
         emb_lw = 50
         emb_features = 5  # Assuming the features tensor has 5 features per word
 
@@ -27,11 +29,20 @@ class nercLSTM(nn.Module):
         self.embS = nn.Embedding(n_sufs, emb_sufs)  # Embeddings for suffixes
         self.embLW = nn.Embedding(n_lcwords, emb_lw)  # Embeddings for lowercased words
 
+        # Dropout layers for embeddings
+        self.dropoutW = nn.Dropout(0.2)  # Dropout for word embeddings
+        self.dropoutS = nn.Dropout(0.2)  # Dropout for suffix embeddings
+        self.dropoutLW = nn.Dropout(0.2)  # Dropout for lowercase word embeddings
+
         # LSTM layer configuration
         hidden_size = total_dim // 2
         self.lstm = nn.LSTM(
             total_dim, hidden_size, num_layers=2, bidirectional=True, batch_first=True
         )
+
+        # ADJUSTMENTS
+        self.lstm_norm = LayerNorm(hidden_size * 2)  # After LSTM and before FC
+        self.prelu = nn.PReLU()
 
         # Output layer dimensions adjustment due to bidirectional LSTM
         lstm_output_dim = hidden_size * 2
@@ -42,21 +53,20 @@ class nercLSTM(nn.Module):
 
     def forward(self, words, suffixes, lcwords, features):
         # Get embeddings from input indices
-        emb_words = self.embW(words)
-        emb_sufs = self.embS(suffixes)
-        emb_lcwords = self.embLW(lcwords)
+        # Get embeddings from input indices
+        emb_words = self.dropoutW(self.embW(words))
+        emb_sufs = self.dropoutS(self.embS(suffixes))
+        emb_lcwords = self.dropoutLW(self.embLW(lcwords))
 
         # Check feature dimension and concatenate all inputs
         # Assuming features is already of the correct shape: [batch_size, sequence_length, 5]
         x = torch.cat((emb_words, emb_sufs, emb_lcwords, features), dim=2)
 
-        # Pass concatenated input through LSTM
         x, _ = self.lstm(x)
+        x = self.lstm_norm(x)  # Normalize before passing to the fully connected layer
 
         # Process LSTM output through fully connected layers
-        x = func.relu(
-            self.fc1(x)
-        )  # Apply ReLU activation function to the output of the first FC layer
+        x = self.prelu(self.fc1(x))
         x = self.fc2(x)  # Pass through the second FC layer to get final predictions
 
         return x
