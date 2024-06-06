@@ -31,8 +31,25 @@ class Codemaps:
                 (n, t) = x.strip().lower().split("|")
                 self.external[n] = t
 
-    def encode_external(self, word):
-        return self.external_index.get(word.lower(), self.external_index["UNK"])
+    def multi_token_match(self, sentence, external, maxlen):
+        tokens = [w["form"].lower() for w in sentence]
+        n = len(tokens)
+        matched_indices = [0] * n  # Default to 0 (no match)
+        for start in range(n):
+            for end in range(start + 1, n + 1):
+                phrase = " ".join(tokens[start:end])
+                if phrase in external:
+                    for i in range(start, end):
+                        if i < maxlen:  # Ensure we do not go out of index bounds
+                            matched_indices[i] = (
+                                1  # Set to 1 if part of a matched phrase
+                            )
+        # Ensure the tensor is of length `maxlen`
+        if len(matched_indices) > maxlen:
+            matched_indices = matched_indices[:maxlen]  # Truncate
+        else:
+            matched_indices += [0] * (maxlen - len(matched_indices))  # Pad with zeros
+        return torch.Tensor(matched_indices)
 
     # --------- Create indexs from training data
     # Extract all words and labels in given sentences and
@@ -206,35 +223,102 @@ class Codemaps:
         for i, s in enumerate(enc):
             Xlw[i, 0 : s.size()[0]] = s
 
-        # Features
+        ################## Features
 
-        enc = []
-        for s in data.sentences():
-            cap = torch.Tensor([1 if w["form"].istitle() else 0 for w in s]).unsqueeze(
-                1
+        # Feature: Capitalization
+        enc_cap = [
+            torch.Tensor([(1 if w["form"].istitle() else 0) for w in s])
+            for s in data.sentences()
+        ]
+        enc_cap = [e[: self.maxlen] for e in enc_cap]
+        Xfcap = torch.full((len(enc_cap), self.maxlen), 0, dtype=torch.int64)
+        for i, s in enumerate(enc_cap):
+            Xfcap[i, : s.size(0)] = s
+
+        # Feature: Dashes
+        enc_dash = [
+            torch.Tensor([(1 if "-" in w["form"] else 0) for w in s])
+            for s in data.sentences()
+        ]
+        enc_dash = [e[: self.maxlen] for e in enc_dash]
+        Xfdash = torch.full((len(enc_dash), self.maxlen), 0, dtype=torch.int64)
+        for i, s in enumerate(enc_dash):
+            Xfdash[i, : s.size(0)] = s
+
+        # Feature: Numbers
+        enc_num = [
+            torch.Tensor(
+                [(1 if any(char.isdigit() for char in w["form"]) else 0) for w in s]
             )
-            dash = torch.Tensor([1 if "-" in w["form"] else 0 for w in s]).unsqueeze(1)
-            num = torch.Tensor(
-                [1 if any(char.isdigit() for char in w["form"]) else 0 for w in s]
-            ).unsqueeze(1)
-            ext = torch.Tensor(
-                [1 if w["lc_form"] in self.external_index else 0 for w in s]
-            ).unsqueeze(1)
-            features = torch.cat((cap, dash, num, ext), dim=1)
-            enc.append(features)
+            for s in data.sentences()
+        ]
+        enc_num = [e[: self.maxlen] for e in enc_num]
+        Xfnum = torch.full((len(enc_num), self.maxlen), 0, dtype=torch.int64)
+        for i, s in enumerate(enc_num):
+            Xfnum[i, : s.size(0)] = s
+
+        # Feature: External file label
+
+        enc = [
+            torch.Tensor(
+                [
+                    (
+                        1
+                        if w["lc_form"] in self.external_index
+                        and self.external[w["lc_form"]] == "drug"
+                        else (
+                            2
+                            if w["lc_form"] in self.external_index
+                            and self.external[w["lc_form"]] == "brand"
+                            else (
+                                3
+                                if w["lc_form"] in self.external_index
+                                and self.external[w["lc_form"]] == "drug_n"
+                                else (
+                                    4
+                                    if w["lc_form"] in self.external_index
+                                    and self.external[w["lc_form"]] == "group"
+                                    else 0
+                                )
+                            )
+                        )
+                    )  # default case
+                    for w in s
+                ]
+            )
+            for s in data.sentences()
+        ]
 
         # Cut sentences longer than maxlen
         enc = [e[: self.maxlen] for e in enc]
-        # Create a tensor full of zeros
-        Xf = torch.zeros((len(enc), self.maxlen, 4), dtype=torch.int64)
+
+        # Create a tensor full of zeros (for padding)
+        tsr = torch.Tensor([])
+        Xfext = tsr.new_full((len(enc), self.maxlen), 0, dtype=torch.int64)
 
         # Fill the padding tensor with sentence data
         for i, s in enumerate(enc):
-            end_idx = s.shape[0]  # Find the actual length of the sentence features
-            Xf[i, :end_idx, :] = s  # Assign the sentence's features to the Xf tensor
+            Xfext[i, 0 : s.size()[0]] = s
+
+        # Feature: multi token
+        # Encoding multi-token entities and ensuring dimension consistency
+        enc_ext_multi = [
+            self.multi_token_match(s, self.external, self.maxlen)
+            for s in data.sentences()
+        ]
+
+        # Create a tensor full of padding (this may not be necessary now since multi_token_match handles padding)
+        tsr = torch.Tensor([])
+        Xext_multi = tsr.new_full(
+            (len(enc_ext_multi), self.maxlen), 0, dtype=torch.int64
+        )
+
+        # Fill the padding tensor with sentence data
+        for i, s in enumerate(enc_ext_multi):
+            Xext_multi[i, : s.size(0)] = s
 
         # Return encoded sequences
-        return [Xw, Xs, Xlw, Xf]
+        return [Xw, Xs, Xlw, Xfcap, Xfdash, Xfnum, Xfext, Xext_multi]
 
     ## --------- encode Y from given data -----------
     def encode_labels(self, data):
