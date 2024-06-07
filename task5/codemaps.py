@@ -33,25 +33,19 @@ class Codemaps:
 
     def encode_features(self, sentence, maxlen, external_index, external):
         features = torch.zeros(
-            (maxlen, 5), dtype=torch.int64
-        )  # Prepare tensor for features
+            (maxlen, 6), dtype=torch.int64
+        )  # Adjust number of features!!!!
 
         for i, word in enumerate(sentence):
             if i >= maxlen:
                 break
-            # Feature 1: Is capitalized
+            # Existing features
             is_capitalized = 1 if word["form"][0].isupper() else 0
-
-            # Feature 2: Contains dash
             contains_dash = 1 if "-" in word["form"] else 0
-
-            # Feature 3: Contains numbers
             contains_numbers = 1 if any(char.isdigit() for char in word["form"]) else 0
-
-            # Feature 4: Word length
             word_length = len(word["form"])
 
-            # Feature 5: External classification
+            # External classification feature
             lc_form = word["lc_form"]
             external_feature = (
                 1
@@ -72,6 +66,15 @@ class Codemaps:
                 )
             )
 
+            # New features
+            position_in_sentence = i
+            distance_from_start = word["start"]
+            is_start = 1 if i == 0 else 0
+            is_end = 1 if i == len(sentence) - 1 else 0
+            percent_uppercase = sum(1 for c in word["form"] if c.isupper()) / len(
+                word["form"]
+            )
+
             # Collect all features into a tensor
             features[i] = torch.tensor(
                 [
@@ -80,6 +83,7 @@ class Codemaps:
                     contains_numbers,
                     word_length,
                     external_feature,
+                    position_in_sentence,
                 ],
                 dtype=torch.int64,
             )

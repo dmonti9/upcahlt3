@@ -19,8 +19,8 @@ class nercLSTM(nn.Module):
         # Embeddings
         emb_words = 100
         emb_sufs = 100
-        emb_lw = 50
-        emb_features = 5  # Assuming the features tensor has 5 features per word
+        emb_lw = 100
+        emb_features = 6
 
         # Calculate total dimension for LSTM input: word embeddings + suffix embeddings + lcwords embeddings + features
         total_dim = emb_words + emb_sufs + emb_lw + emb_features
@@ -37,12 +37,17 @@ class nercLSTM(nn.Module):
         # LSTM layer configuration
         hidden_size = total_dim // 2
         self.lstm = nn.LSTM(
-            total_dim, hidden_size, num_layers=2, bidirectional=True, batch_first=True
+            total_dim,
+            hidden_size,
+            num_layers=2,
+            bidirectional=True,
+            batch_first=True,
         )
 
         # ADJUSTMENTS
         self.lstm_norm = LayerNorm(hidden_size * 2)  # After LSTM and before FC
-        self.prelu = nn.PReLU()
+
+        self.prelu = nn.ELU()
 
         # Output layer dimensions adjustment due to bidirectional LSTM
         lstm_output_dim = hidden_size * 2
@@ -53,13 +58,11 @@ class nercLSTM(nn.Module):
 
     def forward(self, words, suffixes, lcwords, features):
         # Get embeddings from input indices
-        # Get embeddings from input indices
         emb_words = self.dropoutW(self.embW(words))
         emb_sufs = self.dropoutS(self.embS(suffixes))
         emb_lcwords = self.dropoutLW(self.embLW(lcwords))
 
         # Check feature dimension and concatenate all inputs
-        # Assuming features is already of the correct shape: [batch_size, sequence_length, 5]
         x = torch.cat((emb_words, emb_sufs, emb_lcwords, features), dim=2)
 
         x, _ = self.lstm(x)
