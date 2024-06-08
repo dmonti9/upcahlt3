@@ -19,8 +19,8 @@ class nercLSTM(nn.Module):
         # Embeddings
         emb_words = 100
         emb_sufs = 100
-        emb_lw = 100
-        emb_features = 6
+        emb_lw = 50
+        emb_features = 7
 
         # Calculate total dimension for LSTM input: word embeddings + suffix embeddings + lcwords embeddings + features
         total_dim = emb_words + emb_sufs + emb_lw + emb_features
@@ -30,9 +30,9 @@ class nercLSTM(nn.Module):
         self.embLW = nn.Embedding(n_lcwords, emb_lw)  # Embeddings for lowercased words
 
         # Dropout layers for embeddings
-        self.dropoutW = nn.Dropout(0.2)  # Dropout for word embeddings
-        self.dropoutS = nn.Dropout(0.2)  # Dropout for suffix embeddings
-        self.dropoutLW = nn.Dropout(0.2)  # Dropout for lowercase word embeddings
+        self.dropoutW = nn.Dropout(0.3)  # Dropout for word embeddings
+        self.dropoutS = nn.Dropout(0.3)  # Dropout for suffix embeddings
+        self.dropoutLW = nn.Dropout(0.3)  # Dropout for lowercase word embeddings
 
         # LSTM layer configuration
         hidden_size = total_dim // 2
@@ -47,7 +47,7 @@ class nercLSTM(nn.Module):
         # ADJUSTMENTS
         self.lstm_norm = LayerNorm(hidden_size * 2)  # After LSTM and before FC
 
-        self.prelu = nn.ELU()
+        self.selu = nn.SELU()
 
         # Output layer dimensions adjustment due to bidirectional LSTM
         lstm_output_dim = hidden_size * 2
@@ -69,7 +69,7 @@ class nercLSTM(nn.Module):
         x = self.lstm_norm(x)  # Normalize before passing to the fully connected layer
 
         # Process LSTM output through fully connected layers
-        x = self.prelu(self.fc1(x))
+        x = self.selu(self.fc1(x))
         x = self.fc2(x)  # Pass through the second FC layer to get final predictions
 
         return x

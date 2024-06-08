@@ -33,7 +33,7 @@ class Codemaps:
 
     def encode_features(self, sentence, maxlen, external_index, external):
         features = torch.zeros(
-            (maxlen, 6), dtype=torch.int64
+            (maxlen, 7), dtype=torch.int64
         )  # Adjust number of features!!!!
 
         for i, word in enumerate(sentence):
@@ -84,6 +84,7 @@ class Codemaps:
                     word_length,
                     external_feature,
                     position_in_sentence,
+                    percent_uppercase,
                 ],
                 dtype=torch.int64,
             )
