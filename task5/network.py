@@ -19,7 +19,7 @@ class nercLSTM(nn.Module):
         # Embeddings
         emb_words = 100
         emb_sufs = 100
-        emb_lw = 50
+        emb_lw = 100
         emb_features = 5  # Assuming the features tensor has 5 features per word
 
         # Calculate total dimension for LSTM input: word embeddings + suffix embeddings + lcwords embeddings + features
@@ -40,9 +40,16 @@ class nercLSTM(nn.Module):
             total_dim, hidden_size, num_layers=2, bidirectional=True, batch_first=True
         )
 
+        # Multi-head Attention
+        self.attention = nn.MultiheadAttention(
+            embed_dim=hidden_size * 2,  # Because LSTM is bidirectional
+            num_heads=8,  # Number of attention heads
+            batch_first=True,  # Because input and output tensors are provided as (batch, seq, feature)
+        )
+
         # ADJUSTMENTS
-        self.lstm_norm = LayerNorm(hidden_size * 2)  # After LSTM and before FC
-        self.prelu = nn.PReLU()
+        # self.lstm_norm = LayerNorm(hidden_size * 2)  # After LSTM and before FC
+        self.selu = nn.SELU()
 
         # Output layer dimensions adjustment due to bidirectional LSTM
         lstm_output_dim = hidden_size * 2
@@ -63,10 +70,15 @@ class nercLSTM(nn.Module):
         x = torch.cat((emb_words, emb_sufs, emb_lcwords, features), dim=2)
 
         x, _ = self.lstm(x)
-        x = self.lstm_norm(x)  # Normalize before passing to the fully connected layer
 
-        # Process LSTM output through fully connected layers
-        x = self.prelu(self.fc1(x))
-        x = self.fc2(x)  # Pass through the second FC layer to get final predictions
+        # Applying attention
+        attn_output, attn_output_weights = self.attention(x, x, x)  # Self-attention
+        x = attn_output
+
+        # Process through fully connected layers
+        x = self.selu(
+            self.fc1(x)
+        )  # Ensure fc1 outputs [batch_size * seq_len, num_classes]
+        x = self.fc2(x)
 
         return x
