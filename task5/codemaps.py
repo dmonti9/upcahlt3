@@ -14,6 +14,9 @@ class Codemaps:
         if isinstance(data, Dataset) and maxlen is not None and suflen is not None:
             self.__create_indexs(data, maxlen, suflen)
 
+            # new external list
+            # self.external_list = self.create_external_list()
+
         elif type(data) == str and maxlen is None and suflen is None:
             self.__load(data)
 
