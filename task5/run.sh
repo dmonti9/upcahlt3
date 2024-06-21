@@ -4,12 +4,12 @@ AHLT=..
 
 # train NN
 echo "Training NN"
-python3 train.py $AHLT/data/train $AHLT/data/devel 8 final+glove+weights+LReLU
+python3 train.py $AHLT/data/train $AHLT/data/devel 8 new
 
 # run model on devel data and compute performance
 echo "Predicting"
-python3 predict.py final+glove+weights+LReLU $AHLT/data/devel > final+glove+weights+LReLU.out 
+python3 predict.py new $AHLT/data/devel > new.out 
 
 # evaluate results
 echo "Evaluating results..."
-python3 $AHLT/util/evaluator.py NER $AHLT/data/devel final+glove+weights+LReLU.out > final+glove+weights+LReLU.stats
+python3 $AHLT/util/evaluator.py NER $AHLT/data/devel new.out > new.stats
