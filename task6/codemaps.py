@@ -119,8 +119,9 @@ class Codemaps :
         Xp = self.__encode_and_pad(data, self.pos_index, 'pos')        
         # return encoded sequences in a list
         # return [Xw,Xlw,Xl,Xp] (or just the subset expected by the NN inputs) 
-        return [Xw]
+        return [Xw,Xp,Xlw,Xl]
     
+
     ## --------- encode Y from given data ----------- 
     def encode_labels(self, data) :
         # encode and pad sentence labels 
@@ -159,4 +160,3 @@ class Codemaps :
             if self.label_index[l] == i:
                 return l
         raise KeyError
-

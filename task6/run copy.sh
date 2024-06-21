@@ -1,0 +1,26 @@
+#! /bin/bash
+
+AHLT=..
+
+if [[ "$*" == *"parse"* ]]; then
+   $AHLT/util/corenlp-server.sh  &
+   sleep 1
+
+   PYTHONPATH=$AHLT/util
+   python3 parse_data.py $AHLT/data/train train
+   python3 parse_data.py $AHLT/data/test test
+   kill `cat /tmp/corenlp-server.running`
+fi
+
+if [[ "$*" == *"train"* ]]; then
+    rm -rf model model.idx
+    python3 train.py train.pck devel.pck 10 model
+fi
+
+if [[ "$*" == *"predict"* ]]; then
+   rm -f devel.stats devel.out
+   python3 predict.py model test.pck > test.out 
+   python3 $AHLT/util/evaluator.py DDI $AHLT/data/test test.out > test.stats
+fi
+
+
