@@ -17,9 +17,9 @@ class nercLSTM(nn.Module):
         n_labels = codes.get_n_labels()
 
         # Embeddings / Features
-        emb_words = 120
-        emb_sufs = 120
-        emb_lw = 60
+        emb_words = 100
+        emb_sufs = 100
+        emb_lw = 50
         emb_features = 7
 
         # Total dimension for LSTM input
